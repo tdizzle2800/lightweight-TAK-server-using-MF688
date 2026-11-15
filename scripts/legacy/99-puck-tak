@@ -1,0 +1,25 @@
+#!/system/bin/sh
+# puck-tak init.d script - starts TAK server on boot
+
+DIR="/data/local/tmp/tak"
+LOG="$DIR/server.log"
+PID_FILE="$DIR/pid"
+BIND="192.168.100.1"
+
+mkdir -p "$DIR/data"
+
+# Rotate logs if they're getting too large (>10MB)
+if [ -f "$LOG" ] && [ $(stat -c%s "$LOG") -gt 10485760 ]; then
+    mv "$LOG" "$LOG.old"
+fi
+
+# Start puck-tak server
+exec "$DIR/puck-tak" \
+    -daemon \
+    -bind "$BIND" \
+    -data "$DIR/data" \
+    -log "$LOG" \
+    -pidfile "$PID_FILE" \
+    -cert "$DIR/cert.pem" \
+    -key "$DIR/key.pem" \
+    >> "$LOG" 2>&1

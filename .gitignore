@@ -1,0 +1,8 @@
+# TLS material: generate locally (deploy.sh does this), never commit the key
+*.pem
+
+# local (non-ARM) test build
+/puck-tak
+data/
+*.log
+.DS_Store
