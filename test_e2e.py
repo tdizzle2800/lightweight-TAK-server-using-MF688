@@ -284,6 +284,26 @@ try:
                           "-data", DATA, "-cert", "/nonexistent.pem", "-key", key], capture_output=True, timeout=10)
     check("a missing -cert file stops the server with an error", bad.returncode != 0)
 
+    gcert, gkey = os.path.join(SCRATCH, "gen-cert.pem"), os.path.join(SCRATCH, "gen-key.pem")
+    for f in (gcert, gkey):
+        if os.path.exists(f):
+            os.remove(f)
+    genargs = ["-cert", gcert, "-key", gkey, "-gen-cert", "-cot-tls-port", str(COT_TLS)]
+    p = start(genargs)
+    t = Cli(tls=True)
+    check("-gen-cert creates a working cert/key pair", os.path.exists(gcert) and os.path.exists(gkey)
+          and t.s.getpeercert(binary_form=True) is not None)
+    t.s.close()
+    first = open(gcert).read()
+    stop(p)
+    p = start(genargs)
+    check("-gen-cert keeps an existing pair on restart", open(gcert).read() == first)
+    stop(p)
+    os.remove(gkey)
+    lone = subprocess.run([BIN, "-bind", "127.0.0.1", "-cot-port", str(COT), "-http-port", str(HTTP),
+                           "-data", DATA, *genargs], capture_output=True, timeout=10)
+    check("-gen-cert refuses when only the cert exists (no mismatched pair)", lone.returncode != 0 and os.path.exists(gcert))
+
     print("Waiting for a bind address")
     open(LOG, "w").close()
     w = subprocess.Popen([BIN, "-bind", "10.255.255.1", "-cot-port", str(COT), "-http-port", str(HTTP),

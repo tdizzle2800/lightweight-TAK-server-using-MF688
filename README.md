@@ -4,8 +4,8 @@ A tiny TAK-compatible server for the ZTE MF688 WiFi puck (Android 4.4.4, 32-bit 
 One static Go binary, no dependencies, about 10-20 MB of RAM in use. It lets ATAK / iTAK / WinTAK
 devices on the puck's WiFi share locations and pass data packages, with no internet needed.
 
-Current version: **0.2.0**. It does plain TCP and TLS CoT, data packages, and the server-info
-endpoints ATAK asks for. The video relay that was tried on Nov 10 is not included (see `docs/NOTES.md`).
+Current version: **0.3.0**. It does plain TCP and TLS CoT, data packages, and the server-info
+endpoints ATAK asks for, and installs from Windows, macOS or Linux. The video relay that was tried on Nov 10 is not included (see `docs/NOTES.md`).
 
 ## What it does
 
@@ -25,15 +25,17 @@ not on the cellular side.
 
 ## Install
 
-On a Mac/Linux machine with `adb` and the puck plugged in:
+**→ Step-by-step guide: [INSTALL.md](INSTALL.md)**
 
-    ./deploy.sh              # binds to 192.168.100.1 (the puck's WiFi bridge)
+Short version, with the puck plugged in over USB and `adb devices` listing it:
 
-`deploy.sh` pushes `bin/puck-tak-armv7`, generates `cert.pem`/`key.pem` if you don't have them
-(they are git-ignored), sets up auto-start, starts the server and prints the log. You should see a
-line starting `puck-tak ... up`.
+| Windows | macOS / Linux |
+|---------|---------------|
+| double-click `deploy.cmd` | `bash deploy.sh` |
 
-Quick check: connect a phone to the puck's WiFi and open `http://192.168.100.1:8080/`.
+The installer copies `bin/puck-tak-armv7` to the puck, sets up auto-start, starts the server and
+shows the log. On first start the puck creates its own TLS certificate, so OpenSSL isn't needed.
+Then connect a phone to the puck's WiFi and open `http://192.168.100.1:8080/`.
 
 ## ATAK / WinTAK / iTAK
 
@@ -57,14 +59,9 @@ borrowing the stock `himiwebserver` service, which init starts when `sys.himiweb
 2. `/system/bin/himiwebserver` → symlink to that wrapper (original kept as `himiwebserver.real`)
 3. `/data/local.prop` contains `sys.himiweb_start=1`
 
-At boot init reads `local.prop`, starts "himiwebserver", and that starts puck-tak. `deploy.sh` does
-all three steps. Verified to survive a reboot.
-
-To undo:
-
-    adb remount
-    adb shell 'rm /system/bin/himiwebserver && mv /system/bin/himiwebserver.real /system/bin/himiwebserver'
-    adb shell 'rm /data/local.prop'
+At boot init reads `local.prop`, starts "himiwebserver", and that starts puck-tak. The installer does
+all three steps. Verified to survive a reboot. `deploy.cmd -Uninstall` / `bash deploy.sh --uninstall`
+undoes them.
 
 `scripts/legacy/` keeps the earlier init.d and boot-script attempts for reference; they don't run on this device.
 
@@ -77,17 +74,32 @@ To undo:
 The log rotates at 1 MB (one old file is kept). Add `-v` to log every CoT event while debugging.
 
 Options: `-cot-port`, `-http-port`, `-max-upload-mb` (default 100), `-max-store-mb` (default 500),
-`-bind`, `-data`, `-log`, `-pidfile`, `-daemon`, `-v`, and for TLS `-cert`, `-key`, `-cot-tls-port` (default 8089).
+`-bind`, `-data`, `-log`, `-pidfile`, `-daemon`, `-v`, and for TLS `-cert`, `-key`, `-cot-tls-port` (default 8089)
+and `-gen-cert` (create a self-signed pair at the `-cert`/`-key` paths if neither file exists yet).
 Without `-cert`/`-key` the TLS port is simply not opened.
+
+## Files
+
+| Path | What |
+|------|------|
+| `deploy.cmd`, `deploy.ps1` | Installer for Windows |
+| `deploy.sh` | Installer for macOS / Linux |
+| `bin/puck-tak-armv7` | Server binary for the puck |
+| `*.go`, `go.mod` | Server source |
+| `test_e2e.py` | End-to-end tests |
+| `scripts/himi-wrapper.sh` | Boot wrapper the installer puts on the puck |
+| `scripts/legacy/` | Old auto-start attempts that don't work on this firmware (kept for reference) |
+| `docs/NOTES.md` | Hardware details and what was tried along the way |
 
 ## Build from source
 
     CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -trimpath -ldflags "-s -w" -o bin/puck-tak-armv7 .
-    go build -o puck-tak . && python3 test_e2e.py ./puck-tak /tmp/pucktest     # 44 checks
+    go build -o puck-tak . && python3 test_e2e.py ./puck-tak /tmp/pucktest     # 47 checks
 
 ## Still to do
 
 - Turn off the unauthenticated network adb listener (port 22345) on the puck.
+- A documented way to make ATAK trust the TLS certificate (truststore), so 8089 can be used.
 - Client-certificate auth for TLS.
 
 See `docs/NOTES.md` for hardware details and what was tried along the way.

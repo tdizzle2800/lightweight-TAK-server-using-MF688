@@ -1,0 +1,12 @@
+# Scripts that run on the puck or on macOS/Linux must keep LF line endings,
+# even when the repo is checked out on Windows.
+*.sh          text eol=lf
+scripts/**    text eol=lf
+*.go          text eol=lf
+*.py          text eol=lf
+
+# Windows scripts
+*.ps1         text eol=crlf
+*.cmd         text eol=crlf
+
+bin/*         binary

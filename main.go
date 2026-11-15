@@ -26,7 +26,7 @@ import (
 	"time"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 var (
 	flagBind      = flag.String("bind", "127.0.0.1", "address to listen on (on the puck: the WiFi bridge address)")
@@ -34,6 +34,7 @@ var (
 	flagCoTTLS    = flag.Int("cot-tls-port", 8089, "TLS port for the CoT stream (only used with -cert and -key)")
 	flagCert      = flag.String("cert", "", "TLS certificate (PEM); enables the TLS CoT port together with -key")
 	flagKey       = flag.String("key", "", "TLS private key (PEM)")
+	flagGenCert   = flag.Bool("gen-cert", false, "create a self-signed -cert/-key pair if neither file exists yet")
 	flagHTTP      = flag.Int("http-port", 8080, "TCP port for HTTP (data packages)")
 	flagData      = flag.String("data", "./data", "directory for stored data packages")
 	flagMaxUpload = flag.Int("max-upload-mb", 100, "largest single upload, in MB")
@@ -160,6 +161,18 @@ func main() {
 	}
 	var tlsLn net.Listener
 	tlsDesc := "off"
+	if *flagGenCert {
+		if *flagCert == "" || *flagKey == "" {
+			log.Fatalf("tls: -gen-cert needs -cert and -key paths")
+		}
+		created, err := ensureCert(*flagCert, *flagKey, *flagBind)
+		if err != nil {
+			log.Fatalf("tls: -gen-cert: %v", err)
+		}
+		if created {
+			log.Printf("tls: created self-signed certificate %s (key %s)", *flagCert, *flagKey)
+		}
+	}
 	if *flagCert != "" || *flagKey != "" {
 		cert, err := tls.LoadX509KeyPair(*flagCert, *flagKey)
 		if err != nil {
