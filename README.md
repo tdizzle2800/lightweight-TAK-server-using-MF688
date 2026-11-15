@@ -7,6 +7,8 @@ devices on the puck's WiFi share locations and pass data packages, with no inter
 Current version: **0.3.0**. It does plain TCP and TLS CoT, data packages, and the server-info
 endpoints ATAK asks for, and installs from Windows, macOS or Linux. The video relay that was tried on Nov 10 is not included (see `docs/NOTES.md`).
 
+Yes this is vibecoded
+
 ## What it does
 
 - **CoT relay** (TCP 8087, and TLS 8089 when `-cert`/`-key` are given): location, markers and other CoT
