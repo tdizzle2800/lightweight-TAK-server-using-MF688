@@ -10,7 +10,9 @@ binary is already in `bin/`.
 >   service used for auto-start. The installer checks for both and tells you if something is missing.
 > - Auto-start changes `/system` on the puck. `deploy -Uninstall` / `--uninstall` puts it back.
 > - There are **no user accounts**. Anyone who can join the puck's WiFi can see positions and
->   download or upload data packages. Use a strong WiFi password.
+>   download or upload data packages. Use a strong WiFi password. (The stock firmware also allows
+>   password-free adb over WiFi on port 22345, so this matters even without puck-tak.)
+> - Provided as is, with no warranty (see LICENSE). You are modifying your own device at your own risk.
 
 ## What you need
 
@@ -40,7 +42,7 @@ Linux zip from the link above.
 ## 2. Get puck-tak
 
 On the GitHub page: **Code → Download ZIP**, then unzip it. If you use git:
-`git clone https://github.com/tdizzle2800/MF688-atak-server.git`.
+`git clone https://github.com/tdizzle2800/lightweight-TAK-server-using-MF688.git`.
 
 (While the repository is private, only people you've added on GitHub can download it.)
 

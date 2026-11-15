@@ -9,6 +9,9 @@ endpoints ATAK asks for, and installs from Windows, macOS or Linux. The video re
 
 Yes this is vibecoded
 
+> Not affiliated with or endorsed by the TAK Product Center, ZTE or any government agency.
+> "TAK", "ATAK", "iTAK" and "WinTAK" are used only to say which apps this works with.
+
 ## What it does
 
 - **CoT relay** (TCP 8087, and TLS 8089 when `-cert`/`-key` are given): location, markers and other CoT
@@ -24,6 +27,10 @@ Yes this is vibecoded
 There is **no authentication**: TLS encrypts the CoT stream but accepts any client. Anyone on the puck's WiFi can read and upload
 packages, so the WiFi password is the only gate. The server listens on the WiFi bridge address only,
 not on the cellular side.
+
+**Separate from puck-tak:** on the MF688 tested, the stock firmware also accepts adb over the network
+on port 22345 with no password, which gives anyone on the puck's WiFi a root shell. puck-tak doesn't
+open or need this. Keep your WiFi password strong, and only let people you trust onto the puck.
 
 ## Install
 
@@ -92,6 +99,7 @@ Without `-cert`/`-key` the TLS port is simply not opened.
 | `scripts/himi-wrapper.sh` | Boot wrapper the installer puts on the puck |
 | `scripts/legacy/` | Old auto-start attempts that don't work on this firmware (kept for reference) |
 | `docs/NOTES.md` | Hardware details and what was tried along the way |
+| `LICENSE`, `THIRD_PARTY_NOTICES.md` | License terms |
 
 ## Build from source
 
@@ -100,8 +108,14 @@ Without `-cert`/`-key` the TLS port is simply not opened.
 
 ## Still to do
 
-- Turn off the unauthenticated network adb listener (port 22345) on the puck.
+- Find a safe way to turn off the stock network adb listener (port 22345).
 - A documented way to make ATAK trust the TLS certificate (truststore), so 8089 can be used.
 - Client-certificate auth for TLS.
 
 See `docs/NOTES.md` for hardware details and what was tried along the way.
+
+## License
+
+MIT, see [LICENSE](LICENSE). The binary includes the Go standard library, see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Provided as is, with no warranty: you modify
+your own device at your own risk.
