@@ -4,24 +4,22 @@ A tiny TAK-compatible server for the ZTE MF688 WiFi puck (Android 4.4.4, 32-bit 
 One static Go binary, no dependencies, about 10-20 MB of RAM in use. It lets ATAK / iTAK / WinTAK
 devices on the puck's WiFi share locations and pass data packages, with no internet needed.
 
-> ⚠️ **Source vs. binary:** the Go source in this repo is **v0.1.0 (Oct 18)**: CoT relay on TCP 8087
-> and data packages over HTTP 8080. The binary in `bin/puck-tak-armv7` (Nov 10) is a later build
-> that also has **TLS on 8089** (`-cert`/`-key`) and the experimental video endpoints
-> (`-video-multicast`, `/video`, `/stream`). The source for those additions isn't in this repo yet.
-> Building from this source and then running `deploy.sh` as-is will fail, because the old build
-> doesn't know `-cert`/`-key`.
+Current version: **0.2.0**. It does plain TCP and TLS CoT, data packages, and the server-info
+endpoints ATAK asks for. The video relay that was tried on Nov 10 is not included (see `docs/NOTES.md`).
 
 ## What it does
 
-- **CoT relay** (TCP 8087, plus TLS 8089 in the current binary): location, markers and other CoT
+- **CoT relay** (TCP 8087, and TLS 8089 when `-cert`/`-key` are given): location, markers and other CoT
   events are forwarded between connected clients. The latest position or marker for each uid is
   kept, so a client that connects later sees everyone right away. Stale entries are dropped.
 - **Data packages** (HTTP 8080): upload, search and download through the same `/Marti/sync/...`
   endpoints a TAK Server exposes. Files are stored under `/data/local/tmp/tak/data`.
   `http://192.168.100.1:8080/` is a small web page that lists packages and lets you upload from a browser.
+- **Server info** (HTTP 8080): `/Marti/api/version`, `/Marti/api/version/config` and
+  `/Marti/api/clientEndPoints` (connected callsigns), which ATAK/iTAK query on connect.
 - **Auto-start on boot**, using the puck's `himiwebserver` service (see below).
 
-There is **no authentication** on plain TCP/HTTP. Anyone on the puck's WiFi can read and upload
+There is **no authentication**: TLS encrypts the CoT stream but accepts any client. Anyone on the puck's WiFi can read and upload
 packages, so the WiFi password is the only gate. The server listens on the WiFi bridge address only,
 not on the cellular side.
 
@@ -79,16 +77,16 @@ To undo:
 The log rotates at 1 MB (one old file is kept). Add `-v` to log every CoT event while debugging.
 
 Options: `-cot-port`, `-http-port`, `-max-upload-mb` (default 100), `-max-store-mb` (default 500),
-`-bind`, `-data`, `-log`, `-pidfile`, `-daemon`, `-v`; current binary also has `-cert`, `-key`, `-video-multicast`.
+`-bind`, `-data`, `-log`, `-pidfile`, `-daemon`, `-v`, and for TLS `-cert`, `-key`, `-cot-tls-port` (default 8089).
+Without `-cert`/`-key` the TLS port is simply not opened.
 
 ## Build from source
 
     CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -trimpath -ldflags "-s -w" -o bin/puck-tak-armv7 .
-    go build -o puck-tak . && python3 test_e2e.py ./puck-tak /tmp/pucktest     # 37 checks
+    go build -o puck-tak . && python3 test_e2e.py ./puck-tak /tmp/pucktest     # 44 checks
 
 ## Still to do
 
-- Get the TLS/video source changes back into this repo.
 - Turn off the unauthenticated network adb listener (port 22345) on the puck.
 - Client-certificate auth for TLS.
 

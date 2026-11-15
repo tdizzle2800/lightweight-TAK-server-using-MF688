@@ -9,13 +9,14 @@ import json
 import os
 import signal
 import socket
+import ssl
 import subprocess
 import sys
 import tempfile
 import time
 
 BIN, SCRATCH = sys.argv[1], sys.argv[2]
-COT, HTTP = 18087, 18080
+COT, HTTP, COT_TLS = 18087, 18080, 18089
 DATA = os.path.join(SCRATCH, "data")
 PID = os.path.join(SCRATCH, "pid")
 LOG = os.path.join(SCRATCH, "server.log")
@@ -60,8 +61,14 @@ def ev(uid, typ="a-f-G-U-C", stale_s=300, lat=31.95, lon=35.93, extra=""):
 
 
 class Cli:
-    def __init__(self):
-        self.s = socket.create_connection(("127.0.0.1", COT))
+    def __init__(self, tls=False):
+        if tls:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE  # self-signed, like on the puck
+            self.s = ctx.wrap_socket(socket.create_connection(("127.0.0.1", COT_TLS)))
+        else:
+            self.s = socket.create_connection(("127.0.0.1", COT))
         self.s.settimeout(0.4)
         self.buf = b""
 
@@ -247,6 +254,35 @@ try:
     check("file still downloads after restart", st == 200 and data == zipish)
     stop(p)
     check("pidfile removed on clean shutdown", not os.path.exists(PID))
+
+    print("TLS and server info")
+    cert, key = os.path.join(SCRATCH, "cert.pem"), os.path.join(SCRATCH, "key.pem")
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+                    "-keyout", key, "-out", cert, "-subj", "/CN=127.0.0.1"], capture_output=True, check=True)
+    tlsargs = ["-cert", cert, "-key", key, "-cot-tls-port", str(COT_TLS)]
+    p = start(tlsargs)
+    t, plain = Cli(tls=True), Cli()
+    time.sleep(0.3)
+    t.send(ev("tls-alpha"))
+    check("event sent over TLS reaches a plain TCP client", "tls-alpha" in plain.uids())
+    plain.send(ev("plain-bravo"))
+    check("event sent over plain TCP reaches a TLS client", "plain-bravo" in t.uids())
+    st, _, data = req("GET", "/Marti/api/version")
+    check("/Marti/api/version answers", st == 200 and data.startswith(b"puck-tak"), (st, data))
+    st, _, data = req("GET", "/Marti/api/version/config")
+    cfg = json.loads(data) if st == 200 else {}
+    check("/Marti/api/version/config returns ServerConfig", cfg.get("type") == "ServerConfig" and cfg["data"]["api"] == "3", data)
+    st, _, data = req("GET", "/Marti/api/clientEndPoints")
+    eps = {e["uid"]: e for e in json.loads(data)["data"]} if st == 200 else {}
+    check("/Marti/api/clientEndPoints lists connected clients with callsigns",
+          eps.get("tls-alpha", {}).get("callsign") == "tls-alpha" and "plain-bravo" in eps, data)
+    t.s.close()
+    plain.s.close()
+    stop(p)
+    check("startup log mentions the TLS port", f"ssl://127.0.0.1:{COT_TLS}" in open(LOG).read())
+    bad = subprocess.run([BIN, "-bind", "127.0.0.1", "-cot-port", str(COT), "-http-port", str(HTTP),
+                          "-data", DATA, "-cert", "/nonexistent.pem", "-key", key], capture_output=True, timeout=10)
+    check("a missing -cert file stops the server with an error", bad.returncode != 0)
 
     print("Waiting for a bind address")
     open(LOG, "w").close()

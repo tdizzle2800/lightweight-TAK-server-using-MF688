@@ -99,11 +99,13 @@ func nextEvent(b []byte) (ev []byte, used int, ok bool) {
 }
 
 type client struct {
-	addr    string
-	conn    net.Conn
-	out     chan []byte
-	lastUID atomic.Value // string
-	dropped atomic.Uint64
+	addr     string
+	conn     net.Conn
+	out      chan []byte
+	lastUID  atomic.Value // string
+	callsign atomic.Value // string
+	lastSeen atomic.Int64 // unix ms of the last event from this client
+	dropped  atomic.Uint64
 }
 
 type cached struct {
@@ -154,6 +156,7 @@ func (h *hub) acceptLoop(ln net.Listener) {
 func (h *hub) serve(conn net.Conn) {
 	c := &client{addr: conn.RemoteAddr().String(), conn: conn, out: make(chan []byte, clientQueueLen)}
 	c.lastUID.Store("")
+	c.callsign.Store("")
 
 	h.mu.Lock()
 	if len(h.clients) >= maxClients {
@@ -234,8 +237,12 @@ func (h *hub) handleEvent(from *client, ev []byte) {
 	if *flagVerbose {
 		log.Printf("cot: %s uid=%q type=%q %d bytes", from.addr, uid, typ, len(raw))
 	}
+	from.lastSeen.Store(time.Now().UnixMilli())
 	if uid != "" && strings.HasPrefix(typ, "a-f-") {
 		from.lastUID.Store(uid)
+		if m := reCallsign.FindSubmatch(raw); m != nil {
+			from.callsign.Store(string(m[1]))
+		}
 	}
 
 	switch {
@@ -315,4 +322,30 @@ func (h *hub) cacheSize() int {
 	h.cmu.Lock()
 	defer h.cmu.Unlock()
 	return len(h.cache)
+}
+
+var reCallsign = regexp.MustCompile(`<contact[^>]*\scallsign="([^"]*)"`)
+
+// endpoint describes one connected client for /Marti/api/clientEndPoints.
+type endpoint struct {
+	Callsign      string `json:"callsign"`
+	UID           string `json:"uid"`
+	LastEventTime string `json:"lastEventTime"`
+	LastStatus    string `json:"lastStatus"`
+}
+
+func (h *hub) endpoints() []endpoint {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := []endpoint{}
+	for c := range h.clients {
+		uid, _ := c.lastUID.Load().(string)
+		if uid == "" {
+			continue
+		}
+		cs, _ := c.callsign.Load().(string)
+		t := time.UnixMilli(c.lastSeen.Load()).UTC().Format("2006-01-02T15:04:05.000Z")
+		out = append(out, endpoint{Callsign: cs, UID: uid, LastEventTime: t, LastStatus: "Connected"})
+	}
+	return out
 }

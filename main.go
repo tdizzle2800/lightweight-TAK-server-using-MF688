@@ -1,13 +1,15 @@
 // puck-tak: a tiny TAK-compatible server for very small devices.
 //
 //	CoT relay (TCP)         location + markers, relayed between connected clients
+//	CoT relay (TLS)         same hub, on a second port, when -cert/-key are given
 //	Marti sync API (HTTP)   upload / search / download of data packages
 //
-// No auth, no TLS: it is meant for a private WiFi network. Bind it to the
-// WiFi interface address only.
+// No client authentication: it is meant for a private WiFi network. Bind it to
+// the WiFi interface address only.
 package main
 
 import (
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -24,11 +26,14 @@ import (
 	"time"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 var (
 	flagBind      = flag.String("bind", "127.0.0.1", "address to listen on (on the puck: the WiFi bridge address)")
 	flagCoT       = flag.Int("cot-port", 8087, "TCP port for the CoT stream")
+	flagCoTTLS    = flag.Int("cot-tls-port", 8089, "TLS port for the CoT stream (only used with -cert and -key)")
+	flagCert      = flag.String("cert", "", "TLS certificate (PEM); enables the TLS CoT port together with -key")
+	flagKey       = flag.String("key", "", "TLS private key (PEM)")
 	flagHTTP      = flag.Int("http-port", 8080, "TCP port for HTTP (data packages)")
 	flagData      = flag.String("data", "./data", "directory for stored data packages")
 	flagMaxUpload = flag.Int("max-upload-mb", 100, "largest single upload, in MB")
@@ -153,14 +158,31 @@ func main() {
 	if err != nil {
 		log.Fatalf("cot listen: %v", err)
 	}
+	var tlsLn net.Listener
+	tlsDesc := "off"
+	if *flagCert != "" || *flagKey != "" {
+		cert, err := tls.LoadX509KeyPair(*flagCert, *flagKey)
+		if err != nil {
+			log.Fatalf("tls: load -cert/-key: %v", err)
+		}
+		raw, err := listenRetry(net.JoinHostPort(*flagBind, fmt.Sprint(*flagCoTTLS)))
+		if err != nil {
+			log.Fatalf("cot tls listen: %v", err)
+		}
+		tlsLn = tls.NewListener(raw, &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12})
+		tlsDesc = "ssl://" + raw.Addr().String()
+	}
 	httpLn, err := listenRetry(net.JoinHostPort(*flagBind, fmt.Sprint(*flagHTTP)))
 	if err != nil {
 		log.Fatalf("http listen: %v", err)
 	}
-	log.Printf("puck-tak %s up: CoT tcp://%s, HTTP http://%s, data %s (%d packages)",
-		version, cotLn.Addr(), httpLn.Addr(), *flagData, st.count())
+	log.Printf("puck-tak %s up: CoT tcp://%s, CoT TLS %s, HTTP http://%s, data %s (%d packages)",
+		version, cotLn.Addr(), tlsDesc, httpLn.Addr(), *flagData, st.count())
 
 	go h.acceptLoop(cotLn)
+	if tlsLn != nil {
+		go h.acceptLoop(tlsLn)
+	}
 	srv := &http.Server{
 		Handler:           newMux(&api{st: st, hub: h, maxUpload: int64(*flagMaxUpload) << 20}),
 		ReadHeaderTimeout: 10 * time.Second,
@@ -191,6 +213,9 @@ func main() {
 	<-sig
 	log.Printf("shutting down")
 	cotLn.Close()
+	if tlsLn != nil {
+		tlsLn.Close()
+	}
 	srv.Close()
 	if *flagPID != "" {
 		os.Remove(*flagPID)

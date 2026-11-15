@@ -12,6 +12,7 @@ import (
 	"log"
 	"mime"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -277,6 +278,11 @@ func newMux(a *api) http.Handler {
 	mux.HandleFunc("GET /Marti/sync/search", a.search)
 	mux.HandleFunc("GET /Marti/api/sync/metadata/all", a.search)
 
+	// server info that ATAK/iTAK ask for when connecting; without these some clients drop the connection
+	mux.HandleFunc("GET /Marti/api/version", a.version)
+	mux.HandleFunc("GET /Marti/api/version/config", a.versionConfig)
+	mux.HandleFunc("GET /Marti/api/clientEndPoints", a.clientEndPoints)
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("http: UNHANDLED %s %s content-type=%q length=%d", r.Method, r.URL.RequestURI(), r.Header.Get("Content-Type"), r.ContentLength)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
@@ -534,5 +540,34 @@ func (a *api) page(w http.ResponseWriter, r *http.Request) {
 	pageTmpl.Execute(w, map[string]any{
 		"Clients": a.hub.clientCount(), "Count": a.st.count(), "Used": humanSize(a.st.used()),
 		"Max": humanSize(a.st.maxTot), "Version": version, "Rows": rows,
+	})
+}
+
+const takVersion = "puck-tak " + version
+
+func (a *api) version(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain")
+	io.WriteString(w, takVersion)
+}
+
+func (a *api) versionConfig(w http.ResponseWriter, r *http.Request) {
+	host, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		host = r.Host
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"version": "3",
+		"type":    "ServerConfig",
+		"data":    map[string]string{"version": takVersion, "api": "3", "hostname": host},
+		"nodeId":  "puck-tak",
+	})
+}
+
+func (a *api) clientEndPoints(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"version": "3",
+		"type":    "com.bbn.marti.remote.ClientEndpoint",
+		"data":    a.hub.endpoints(),
+		"nodeId":  "puck-tak",
 	})
 }
